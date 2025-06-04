@@ -16,13 +16,13 @@ logo = """
 
 <h1 style="color: blue; text-align: center;">
 
-    CREATOR => Rowedy<br>
+    CREATOR => BLACK DEVIL<br>
 
-    
+    RULEX => WARRIOUR RULEX<br>
 
     FACEBOOK => GOD.OFF.SERVER<br>
 
-    WHATSAPP => 
+    WHATSAPP => 7668337116
 
 </h1>
 
