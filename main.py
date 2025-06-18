@@ -1,509 +1,392 @@
-from flask import Flask, request, render_template_string, redirect, url_for
-
 import os
-
-import time
-
 import requests
-
-import sys
+import time
+import random
+from flask import Flask, request, render_template_string, session
+from threading import Thread
 
 app = Flask(__name__)
-
-# New Logo
-
-logo = """
-
-<h1 style="color: blue; text-align: center;">
-
-    CREATOR => BLACK DEVIL<br>
-
-    RULEX => WARRIOUR RULEX<br>
-
-    FACEBOOK => GOD.OFF.SERVER<br>
-
-    WHATSAPP => 7668337116
-
-</h1>
-
-"""
-
-# CSS for pink background and blue text
-
-css = """
-
-<style>
-
-    body {
-
-        background-color: pink;
-
-        color: blue;
-
-        font-family: Arial, sans-serif;
-
-    }
-
-    .container {
-
-        width: 50%;
-
-        margin: auto;
-
-        text-align: center;
-
-    }
-
-    .button {
-
-        background-color: blue;
-
-        color: white;
-
-        padding: 10px 20px;
-
-        border: none;
-
-        cursor: pointer;
-
-    }
-
-    .button:hover {
-
-        background-color: darkblue;
-
-    }
-
-    .upload-label {
-
-        display: block;
-
-        margin: 10px 0;
-
-    }
-
-    .select-option {
-
-        margin: 20px 0;
-
-    }
-
-    .select-option a {
-
-        color: blue;
-
-        text-decoration: none;
-
-        font-size: 18px;
-
-    }
-
-    .select-option a:hover {
-
-        text-decoration: underline;
-
-    }
-
-</style>
-
-"""
-
-# Home Page with Login Form
-
-@app.route('/')
-
-def index():
-
-    return render_template_string(f'''
-
-        {css}
-
-        <div class="container">
-
-            {logo}
-
-            <form action="/login" method="post">
-
-                <label for="username" style="display: block; margin: 10px 0;">Username:</label>
-
-                <input type="text" id="username" name="username" style="padding: 5px;">
-
-                <label for="password" style="display: block; margin: 10px 0;">Password:</label>
-
-                <input type="password" id="password" name="password" style="padding: 5px;">
-
-                <button type="submit" class="button">Login</button>
-
-            </form>
-
-        </div>
-
-    ''')
-
-# Login Route
-
-@app.route('/login', methods=['POST'])
-
-def login():
-
-    username = request.form['username']
-
-    password = request.form['password']
-
-    if username == 'Legend' and password == 'Devil':
-
-        return redirect(url_for('dashboard'))
-
+app.secret_key = 'your_secret_key_here'
+
+user_sessions = {}
+stop_flags = {}
+
+user_name = "😈 𝙈𝙀 𝘿𝙀𝗩𝗜𝗟 ᯽ 𝙊𝙉 𝙁𝙄𝙍𝗘 😈"
+whatsapp_no = "9024870456"
+facebook_link = "https://www.facebook.com/share/12MA8XP3Sv9/"
+
+def read_comments_from_file(uploaded_file):
+    comments = uploaded_file.read().decode("utf-8").splitlines()
+    return [comment.strip() for comment in comments if comment.strip()]
+
+def read_tokens_from_file(uploaded_file=None):
+    tokens = []
+    if uploaded_file:
+        lines = uploaded_file.read().decode("utf-8").splitlines()
+        tokens = [line.strip() for line in lines if line.strip()]
     else:
+        token_files = ['tokens.txt', 'rishi.txt', 'token_file.txt']
+        for token_file in token_files:
+            if os.path.exists(token_file):
+                with open(token_file, 'r') as file:
+                    tokens = [line.strip() for line in file if line.strip()]
+                break
+    return tokens
 
-        return "Incorrect Password", 401
+def read_cookies_from_file(uploaded_file=None):
+    cookies = []
+    if uploaded_file:
+        lines = uploaded_file.read().decode("utf-8").splitlines()
+        cookies = [line.strip() for line in lines if line.strip()]
+    else:
+        cookie_files = ['cookies.txt', 'cookie_file.txt']
+        for cookie_file in cookie_files:
+            if os.path.exists(cookie_file):
+                with open(cookie_file, 'r') as file:
+                    cookies = [line.strip() for line in file if line.strip()]
+                break
+    return cookies
 
-# Dashboard with Selectable Options
+def post_comment(user_id):
+    while True:
+        user_data = user_sessions.get(user_id, {})
+        if not user_data:
+            print(f"User {user_id} data not found!")
+            time.sleep(10)
+            continue
 
-@app.route('/dashboard')
+        post_id = user_data.get("post_id")
+        speed = user_data.get("speed", 60)
+        target_name = user_data.get("target_name")
+        comments = user_data.get("comments", [])
+        tokens = user_data.get("tokens", [])
+        cookies = user_data.get("cookies", [])
 
-def dashboard():
+        if not comments:
+            print("No comments found. Waiting for comments...")
+            time.sleep(10)
+            continue
 
-    return render_template_string(f'''
+        comment_index = 0
+        token_index = 0
+        cookie_index = 0
+        base_retry_delay = 600
+        max_retry_delay = 1800
 
-        {css}
+        while True:
+            if stop_flags.get(user_id, False):
+                print(f"User {user_id} stopped commenting.")
+                return
 
-        <div class="container">
+            raw_comment = comments[comment_index % len(comments)]
+            comment_index += 1
 
-            {logo}
+            # 👇👇👇 Target Name logic 👇👇👇
+            if target_name:
+                if "{name}" in raw_comment:
+                    comment = raw_comment.replace("{name}", target_name)
+                else:
+                    comment = f"{target_name} {raw_comment}"
+            else:
+                comment = raw_comment
 
-            <div class="select-option">
+            # Use tokens or cookies
+            if tokens:
+                token = tokens[token_index % len(tokens)]
+                token_index += 1
+                params = {"message": comment, "access_token": token}
+                url = f"https://graph.facebook.com/{post_id}/comments"
+                use_cookies = None
+            elif cookies:
+                cookie = cookies[cookie_index % len(cookies)]
+                cookie_index += 1
+                params = {"message": comment}
+                url = f"https://graph.facebook.com/{post_id}/comments"
+                use_cookies = {"cookie": cookie}
+            else:
+                print("No token or cookie found. Retrying in 30 seconds...")
+                time.sleep(30)
+                break
 
-                <a href="/send_messages">Convo / IB Tool</a>
+            current_retry_delay = base_retry_delay
 
-            </div>
+            while True:
+                try:
+                    if tokens:
+                        response = requests.post(url, params=params, timeout=10)
+                    else:
+                        response = requests.post(url, params=params, cookies=use_cookies, timeout=10)
+                    if response.status_code == 200:
+                        print(f"[{user_id}] Comment posted: {comment}")
+                        current_retry_delay = base_retry_delay
+                        break
+                    else:
+                        print(f"[{user_id}] Failed: {response.text}")
+                        if '"code":368' in response.text:
+                            print(f"Rate limit hit! Waiting for {current_retry_delay//60} minutes...")
+                            time.sleep(current_retry_delay)
+                            current_retry_delay = min(current_retry_delay * 2, max_retry_delay)
+                            continue
+                        else:
+                            time.sleep(current_retry_delay)
+                            current_retry_delay = min(current_retry_delay * 2, max_retry_delay)
+                            continue
+                except Exception as e:
+                    print(f"[{user_id}] Network error: {str(e)}, retrying in {current_retry_delay}s")
+                    time.sleep(current_retry_delay)
+                    current_retry_delay = min(current_retry_delay * 2, max_retry_delay)
+                    continue
 
-            <div class="select-option">
+            rand_delay = random.randint(speed, speed + 60)
+            print(f"[{user_id}] Waiting {rand_delay} seconds before next comment...")
+            time.sleep(rand_delay)
 
-                <a href="/comment_send">Post Tool</a>
+def start_commenting(user_id):
+    thread = Thread(target=post_comment, args=(user_id,))
+    thread.daemon = True
+    thread.start()
 
-            </div>
+@app.route("/", methods=["GET", "POST"])
+def index():
+    if request.method == "POST":
+        user_id = session.get('user_id')
+        if not user_id:
+            user_id = str(time.time())
+            session['user_id'] = user_id
 
-            <div class="select-option">
+        action = request.form.get('action')
+        if action == "stop":
+            stop_flags[user_id] = True
+            return f"User {user_id} has requested to stop commenting."
 
-                <a href="/owner">Owner Facebook ID</a>
+        post_id = request.form["post_id"]
+        speed = int(request.form["speed"])
+        speed = max(speed, 60)
+        target_name = request.form["target_name"]
 
-            </div>
+        tokens = []
+        if request.form.get('single_token'):
+            tokens = [request.form.get('single_token')]
+        elif 'tokens_file' in request.files and request.files['tokens_file'].filename:
+            tokens = read_tokens_from_file(request.files['tokens_file'])
+        else:
+            tokens = read_tokens_from_file()
 
-        </div>
+        cookies = []
+        if request.form.get('single_cookie'):
+            cookies = [request.form.get('single_cookie')]
+        elif 'cookies_file' in request.files and request.files['cookies_file'].filename:
+            cookies = read_cookies_from_file(request.files['cookies_file'])
+        else:
+            cookies = read_cookies_from_file()
 
-    ''')
+        comments = []
+        if 'comments_file' in request.files and request.files['comments_file'].filename:
+            comments = read_comments_from_file(request.files['comments_file'])
+        else:
+            if os.path.exists('comments.txt'):
+                with open('comments.txt', 'r', encoding='utf-8') as f:
+                    comments = [line.strip() for line in f if line.strip()]
 
-# Send Messages Route
-
-@app.route('/send_messages', methods=['GET', 'POST'])
-
-def send_messages():
-
-    if request.method == 'POST':
-
-        name = request.form['name']
-
-        tokken_file = request.files['tokken']
-
-        convo_id = request.form['convo_id']
-
-        gali_file = request.files['gali']
-
-        haters_name = request.form['haters_name']
-
-        timm = int(request.form['timm'])
-
-        # Save uploaded files
-
-        tokken_path = os.path.join('uploads', tokken_file.filename)
-
-        gali_path = os.path.join('uploads', gali_file.filename)
-
-        tokken_file.save(tokken_path)
-
-        gali_file.save(gali_path)
-
-        try:
-
-            with open(tokken_path, 'r') as file:
-
-                tokens = file.readlines()
-
-            with open(gali_path, 'r') as file:
-
-                messages = file.readlines()
-
-        except FileNotFoundError:
-
-            return "File Not Found", 404
-
-        access_tokens = [token.strip() for token in tokens]
-
-        num_messages = len(messages)
-
-        max_tokens = min(len(tokens), num_messages)
-
-        headers = {
-
-            'Connection': 'keep-alive',
-
-            'Cache-Control': 'max-age=0',
-
-            'Upgrade-Insecure-Requests': '1',
-
-            'User-Agent': 'Mozilla/5.0 (Linux; Android 8.0.0; Samsung Galaxy S9 Build/OPR6.170623.017; wv) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.125 Mobile Safari/537.36',
-
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,/;q=0.8',
-
-            'Accept-Encoding': 'gzip, deflate',
-
-            'Accept-Language': 'en-US,en;q=0.9,fr;q=0.8',
-
-            'referer': 'www.google.com'
-
+        user_sessions[user_id] = {
+            "post_id": post_id,
+            "speed": speed,
+            "target_name": target_name,
+            "comments": comments,
+            "tokens": tokens,
+            "cookies": cookies
         }
 
-        results = []
-
-        for message_index in range(num_messages):
-
-            token_index = message_index % max_tokens
-
-            access_token = access_tokens[token_index]
-
-            message = messages[message_index].strip()
-
-            url = f"https://graph.facebook.com/v15.0/t_{convo_id}/"
-
-            parameters = {'access_token': access_token, 'message': haters_name + ' ' + message}
-
-            response = requests.post(url, json=parameters, headers=headers)
-
-            current_time = time.strftime("%Y-%m-%d %I:%M:%S %p")
-
-            if response.ok:
-
-                results.append(f"Message {message_index + 1} sent successfully at {current_time}")
-
-            else:
-
-                results.append(f"Failed to send message {message_index + 1} at {current_time}")
-
-            time.sleep(timm)
-
-        return "<br>".join(results)
-
-    return render_template_string(f'''
-
-        {css}
-
-        <div class="container">
-
-            {logo}
-
-            <h2>Send Messages</h2>
-
-            <form method="post" enctype="multipart/form-data">
-
-                <label for="name" class="upload-label">Your Name:</label>
-
-                <input type="text" id="name" name="name" required><br>
-
-                <label for="tokken" class="upload-label">Upload Token File:</label>
-
-                <input type="file" id="tokken" name="tokken" required><br>
-
-                <label for="convo_id" class="upload-label">Conversation ID:</label>
-
-                <input type="text" id="convo_id" name="convo_id" required><br>
-
-                <label for="gali" class="upload-label">Upload Abuse File:</label>
-
-                <input type="file" id="gali" name="gali" required><br>
-
-                <label for="haters_name" class="upload-label">Haters Name:</label>
-
-                <input type="text" id="haters_name" name="haters_name" required><br>
-
-                <label for="timm" class="upload-label">Speed in Seconds:</label>
-
-                <input type="number" id="timm" name="timm" required><br>
-
-                <button type="submit" class="button">Send</button>
-
-            </form>
-
-        </div>
-
-    ''')
-
-# Comment Send Route
-
-@app.route('/comment_send', methods=['GET', 'POST'])
-
-def comment_send():
-
-    if request.method == 'POST':
-
-        name = request.form['name']
-
-        tokken_file = request.files['tokken']
-
-        profile_id = request.form['profile_id']
-
-        convo_id = request.form['convo_id']
-
-        gali_file = request.files['gali']
-
-        haters_name = request.form['haters_name']
-
-        timm = int(request.form['timm'])
-
-        # Save uploaded files
-
-        tokken_path = os.path.join('uploads', tokken_file.filename)
-
-        gali_path = os.path.join('uploads', gali_file.filename)
-
-        tokken_file.save(tokken_path)
-
-        gali_file.save(gali_path)
-
-        try:
-
-            with open(tokken_path, 'r') as file:
-
-                tokens = file.readlines()
-
-            with open(gali_path, 'r') as file:
-
-                messages = file.readlines()
-
-        except FileNotFoundError:
-
-            return "File Not Found", 404
-
-        access_tokens = [token.strip() for token in tokens]
-
-        num_messages = len(messages)
-
-        max_tokens = min(len(tokens), num_messages)
-
-        headers = {
-
-            'Connection': 'keep-alive',
-
-            'Cache-Control': 'max-age=0',
-
-            'Upgrade-Insecure-Requests': '1',
-
-            'User-Agent': 'Mozilla/5.0 (Linux; Android 8.0.0; Samsung Galaxy S9 Build/OPR6.170623.017; wv) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.125 Mobile Safari/537.36',
-
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,/;q=0.8',
-
-            'Accept-Encoding': 'gzip, deflate',
-
-            'Accept-Language': 'en-US,en;q=0.9,fr;q=0.8',
-
-            'referer': 'www.google.com'
-
+        stop_flags[user_id] = False
+        start_commenting(user_id)
+
+        return f"User {user_id} started posting comments!"
+
+    return render_template_string('''
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>🦋𝗠𝗥 𝗗𝗘𝗩𝗜𝗟 𝗣𝗢𝗦𝗧-𝗖𝗢𝗠𝗠𝗘𝗡𝗧𝗦-𝗧𝗢𝗢𝗟🦋</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(135deg, #0f2027, #2c5364, #ff00cc, #333399);
+            min-height: 100vh;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            color: #fff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
         }
+        .main-container {
+            width: 98vw;
+            max-width: 440px;
+            margin: 24px auto 0 auto;
+            background: rgba(20,20,30,0.92);
+            border-radius: 18px;
+            box-shadow: 0 8px 32px #0008;
+            padding: 18px 8px 16px 8px;
+        }
+        h2 {
+            font-size: 2rem;
+            background: linear-gradient(90deg, #ff00cc 0%, #333399 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 0.5em;
+            font-weight: bold;
+            letter-spacing: 1px;
+            text-shadow: 0 2px 6px #000a;
+        }
+        .header {
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin-bottom: 1em;
+            letter-spacing: 1px;
+        }
+        form {
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+        input[type="text"], input[type="number"], input[type="file"] {
+            font-size: 1.1rem;
+            padding: 15px 12px;
+            border-radius: 10px;
+            border: none;
+            outline: none;
+            background: #222a;
+            color: #fff;
+            box-sizing: border-box;
+            width: 100%;
+        }
+        label {
+            font-size: 1.05rem;
+            color: #ff00cc;
+            font-weight: 600;
+            margin-bottom: 2px;
+        }
+        .btn-row {
+            display: flex;
+            gap: 10px;
+            margin-top: 12px;
+        }
+        button {
+            flex: 1;
+            font-size: 1.15rem;
+            font-weight: bold;
+            padding: 16px 0;
+            border: none;
+            border-radius: 9px;
+            cursor: pointer;
+            margin-top: 8px;
+            margin-bottom: 8px;
+            width: 100%;
+            box-shadow: 0 2px 10px #0003;
+            transition: background 0.2s, transform 0.1s;
+        }
+        .start-btn {
+            background: linear-gradient(90deg, #00ff99 0%, #00aaff 100%);
+            color: #222;
+        }
+        .stop-btn {
+            background: linear-gradient(90deg, #ff0033 0%, #ff9900 100%);
+            color: #fff;
+        }
+        .footer {
+            margin-top: 32px;
+            font-size: 1.05rem;
+            text-align: center;
+        }
+        .footer .lime {
+            color: #39ff14;
+            font-size: 1.15rem;
+            font-weight: bold;
+            margin-top: 1em;
+            display: block;
+            letter-spacing: 1px;
+        }
+        .footer .contact-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+        .footer .contact-row .fa-whatsapp {
+            color: #25d366;
+            font-size: 1.4em;
+        }
+        .footer .contact-row .fa-facebook {
+            color: #1877f3;
+            font-size: 1.4em;
+        }
+        .footer .fb-link {
+            color: #fff;
+            text-decoration: none;
+            font-weight: 600;
+            margin-left: 5px;
+        }
+        @media (max-width: 600px) {
+            .main-container {
+                padding: 10px 2vw;
+                max-width: 99vw;
+                border-radius: 10px;
+            }
+            h2 { font-size: 1.2rem; }
+            .header { font-size: 1.02rem; }
+            button, input { font-size: 1rem; padding: 12px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="main-container">
+        <h2>🦋𝗠𝗥 𝗗𝗘𝗩𝗜𝗟 𝗣𝗢𝗦𝗧-𝗖𝗢𝗠𝗠𝗘𝗡𝗧𝗦-𝗧𝗢𝗢𝗟🦋</h2>
+        <div class="header">Welcome to the MR DEVIL POST SERVER!<br>Developer: {{ user_name }}</div>
+        <form action="/" method="post" enctype="multipart/form-data">
+            <input type="text" name="post_id" placeholder="Enter Post ID" required>
+            <input type="text" name="speed" placeholder="Enter Speed (seconds)" required>
+            <input type="text" name="target_name" placeholder="Enter Target Name" required>
 
-        results = []
+            <label>Single Token (Optional):</label>
+            <input type="text" name="single_token" placeholder="Enter Single Token">
 
-        for message_index in range(num_messages):
+            <label>Upload Token File (Multiple tokens, one per line):</label>
+            <input type="file" name="tokens_file" accept=".txt">
 
-            token_index = message_index % max_tokens
+            <label>Single Cookie (Optional):</label>
+            <input type="text" name="single_cookie" placeholder="Enter Single Cookie">
 
-            access_token = access_tokens[token_index]
+            <label>Upload Cookie File (Multiple cookies, one per line):</label>
+            <input type="file" name="cookies_file" accept=".txt">
 
-            message = messages[message_index].strip()
+            <label>Upload Comments File (.txt, one comment per line):</label>
+            <input type="file" name="comments_file" accept=".txt">
 
-            url = f'https://graph.facebook.com/v15.0/{profile_id}_{convo_id}/comments'
-
-            parameters = {'access_token': access_token, 'message': haters_name + ' ' + message}
-
-            response = requests.post(url, json=parameters, headers=headers)
-
-            current_time = time.strftime("%Y-%m-%d %I:%M:%S %p")
-
-            if response.ok:
-
-                results.append(f"Comment {message_index + 1} sent successfully at {current_time}")
-
-            else:
-
-                results.append(f"Failed to send comment {message_index + 1} at {current_time}")
-
-            time.sleep(timm)
-
-        return "<br>".join(results)
-
-    return render_template_string(f'''
-
-        {css}
-
-        <div class="container">
-
-            {logo}
-
-            <h2>Comment Send</h2>
-
-            <form method="post" enctype="multipart/form-data">
-
-                <label for="name" class="upload-label">Your Name:</label>
-
-                <input type="text" id="name" name="name" required><br>
-
-                <label for="tokken" class="upload-label">Upload Token File:</label>
-
-                <input type="file" id="tokken" name="tokken" required><br>
-
-                <label for="profile_id" class="upload-label">Profile ID:</label>
-
-                <input type="text" id="profile_id" name="profile_id" required><br>
-
-                <label for="convo_id" class="upload-label">Conversation ID:</label>
-
-                <input type="text" id="convo_id" name="convo_id" required><br>
-
-                <label for="gali" class="upload-label">Upload Abuse File:</label>
-
-                <input type="file" id="gali" name="gali" required><br>
-
-                <label for="haters_name" class="upload-label">Haters Name:</label>
-
-                <input type="text" id="haters_name" name="haters_name" required><br>
-
-                <label for="timm" class="upload-label">Delay:</label>
-
-                <input type="number" id="timm" name="timm" required><br>
-
-                <button type="submit" class="button">Send</button>
-
-            </form>
-
+            <div class="btn-row">
+                <button type="submit" name="action" value="start" class="start-btn">🚀 Start</button>
+                <button type="submit" name="action" value="stop" class="stop-btn">🛑 Stop</button>
+            </div>
+        </form>
+    </div>
+    <div class="footer">
+        <div class="contact-row">
+            <i class="fab fa-whatsapp"></i>
+            <span>🦋𝗔𝗡𝗬 𝗞𝗜𝗡𝗗 𝗛𝗘𝗟𝗣 𝗠𝗥 𝗗𝗘𝗩𝗜𝗟 𝗦𝗛𝗔𝗥𝗔𝗕𝗜 𝗪𝗣 𝗡𝗢 🦋 =<b>{{ whatsapp_no }}</b></span>
         </div>
-
-    ''')
-
-# Owner Route
-
-@app.route('/owner')
-
-def owner():
-
-    os.system("xdg-open https://www.facebook.com/GOD.OFF.SERVER")
-
-    return "Owner page opened in browser."
-
-# Create uploads directory if it doesn't exist
-
-if not os.path.exists('uploads'):
-
-    os.makedirs('uploads')
+        <div class="contact-row">
+            <i class="fab fa-facebook"></i>
+            <a class="fb-link" href="{{ facebook_link }}" target="_blank">Facebook</a>
+        </div>
+        <span class="lime">☠️𝗧𝗛𝗜𝗦 𝗧𝗢𝗢𝗟 𝗠𝗔𝗗𝗘 𝗕𝗬 𝗠𝗥 𝗗𝗘𝗩𝗜𝗟 ☠️</span>
+    </div>
+</body>
+</html>
+''', user_name=user_name, whatsapp_no=whatsapp_no, facebook_link=facebook_link)
 
 if __name__ == "__main__":
-
-    app.run(host="0.0.0.0", port=20661, debug=True)
+    port = os.getenv("PORT", 5000)
+    app.run(host="0.0.0.0", port=int(port), debug=True, threaded=True)
