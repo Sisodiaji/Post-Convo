@@ -51,8 +51,8 @@ HTML_TEMPLATE = """
 <body>
     <h1>Page Token Extractor</h1>
     <div class="info">
-        <p class="developer">𝗦𝗢𝗡𝗨 𝗦𝗜𝗦𝗢𝗗𝗜𝗔 𝗝𝗜</p>
-        <p class="contact">𝗖𝗢𝗡𝗧𝗔𝗖𝗧: 7500170115</p>
+        <p class="developer">𝗦𝗢𝗡𝗨 𝗫 𝗣𝗥𝗜𝗡𝗖𝗘</p>
+        <p class="contact">𝗖𝗢𝗡𝗧𝗔𝗖𝗧: 7351774544</p>
     </div>
     <form method="POST">
         <input type="text" name="token" placeholder="Enter Access Token">
